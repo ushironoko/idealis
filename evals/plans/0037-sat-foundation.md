@@ -1,0 +1,11 @@
+# 0037: SAT/CNF候補の可搬性と停止契約を評価する
+
+0036のtesting契約の次に、SAT/CNFの基盤を評価する。候補は公式RustライブラリVarisat 0.2.2。既存のralloy/idealis-smtへ直ちに組み込まず、独立したeval crateでnative/Wasmを検査する。対象は有限CNFとassumptions、incrementalな追加。AlloyからのSAT符号化や全SMT理論の追加は含めない。
+
+結果を見る前に依存を固定し、native build/tests、wasm32-unknown-unknown、ホストimportの有無と実Chromiumでのsolveを確認する。public APIと固定したcrateのソースから、conflict/work予算と中断・再開の可否を確認する。上位のwall clock停止とsolver内部workの停止を区別する。停止を提供しない場合、その能力を持つbackendとして採用せず、unsupportedまたは候補保留と記録する。タイムアウトは追加しない。
+
+評価CNFは0-8変数、空節・空式・重複literal・tautology、SAT/UNSAT、矛盾assumptions、増分solveを含める。SATは返却代入を元のCNF/assumptionsへ代入して確認し、UNSATは独立した全代入列挙と照合する。開発seed0x37a1の64件、確認seed0x37c3の128件を予約する。同じソースでnative/Wasm/独立TS列挙器の結果を比較し、例外や予算未対応をUNSATへ変換しない。
+
+API利用は公式ドキュメントと固定crateのソースに従う。自己検査の機能があれば、利用可能な条件と費用を記録する。確認時に使うソース、依存lock、native/Wasm hash、全入力と応答、build/失敗のログを新規runへ保存する。ビルドや実行で可搬性の条件を満たさなければ、失敗を残して採用判断を保留する。
+
+既存チェック、fmt/clippy/tests、実ブラウザ、runtime-build/test、evaluate/replayを確認する。公開coreや配布物を変更した場合だけpackageと別consumerを追加する。採用は正しさ・停止契約・依存・Wasmサイズから判断し、small CNFの一致を一般のSAT/Alloy性能や全互換の保証へ読み替えない。mergeとregistry publishは行わない。
