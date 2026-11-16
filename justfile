@@ -1,6 +1,28 @@
 default:
   @just --list
 
+sat-build:
+  cargo build --release --locked --manifest-path evals/sat-foundation/rust/Cargo.toml
+  cargo build --release --locked --lib --target wasm32-unknown-unknown --manifest-path evals/sat-foundation/rust/Cargo.toml
+
+sat-test: sat-build
+  cargo fmt --manifest-path evals/sat-foundation/rust/Cargo.toml -- --check
+  cargo clippy --all-targets --locked --manifest-path evals/sat-foundation/rust/Cargo.toml -- -D warnings
+  cargo test --all-targets --locked --manifest-path evals/sat-foundation/rust/Cargo.toml
+  pnpm build
+  node --test dist/evals/sat-foundation/contract-test.js
+
+sat-browser: sat-build
+  pnpm exec playwright test --config sat-playwright.config.ts
+
+sat-eval phase run parent="": sat-build
+  pnpm build
+  node dist/evals/sat-foundation/run.js {{quote(phase)}} {{quote(run)}} {{quote(parent)}}
+
+sat-replay run:
+  pnpm build
+  node dist/evals/sat-foundation/replay.js {{quote(run)}}
+
 testing-build:
   cargo build --release --locked --manifest-path crates/idealis-testing/Cargo.toml
   cargo build --release --locked --lib --target wasm32-unknown-unknown --manifest-path crates/idealis-testing/Cargo.toml

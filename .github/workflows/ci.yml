@@ -21,6 +21,12 @@ jobs:
       - run: pnpm check
       - run: pnpm typecheck
       - run: pnpm test
+      - run: cargo fmt --manifest-path evals/sat-foundation/rust/Cargo.toml -- --check
+      - run: cargo clippy --all-targets --locked --manifest-path evals/sat-foundation/rust/Cargo.toml -- -D warnings
+      - run: cargo test --all-targets --locked --manifest-path evals/sat-foundation/rust/Cargo.toml
+      - run: cargo build --release --locked --manifest-path evals/sat-foundation/rust/Cargo.toml
+      - run: cargo build --release --locked --lib --target wasm32-unknown-unknown --manifest-path evals/sat-foundation/rust/Cargo.toml
+      - run: node --test dist/evals/sat-foundation/contract-test.js
       - run: cargo fmt --manifest-path crates/idealis-testing/Cargo.toml -- --check
       - run: cargo clippy --all-targets --locked --manifest-path crates/idealis-testing/Cargo.toml -- -D warnings
       - run: cargo test --all-targets --locked --manifest-path crates/idealis-testing/Cargo.toml
@@ -85,6 +91,7 @@ jobs:
       - run: pnpm runtime:test
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:browser
+      - run: pnpm exec playwright test --config sat-playwright.config.ts
       - run: pnpm exec playwright test --config testing-playwright.config.ts
       - run: pnpm exec playwright test --config smt-playwright.config.ts
       - run: pnpm exec playwright test --config alloy-playwright.config.ts

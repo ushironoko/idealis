@@ -15,6 +15,7 @@
       "!crates/idealis-smt/target",
       "!crates/ralloy/target",
       "!crates/idealis-testing/target",
+      "!evals/sat-foundation/rust/target",
       "!evals/shared-oracle-rust/target",
       "!crates/idealis-core/target",
       "!crates/rtlc/target",
