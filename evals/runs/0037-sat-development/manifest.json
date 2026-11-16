@@ -1,0 +1,146 @@
+{
+  "sources": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "5a47e20a225da4033ac61da4cb3b9c4a237ac4ec8803f472cdec4aea69fd6f30"
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "d361af71b8770c005abcbc48c439037c53ac83f32e4f7c573b23571501eec101"
+    },
+    {
+      "path": "biome.json",
+      "sha256": "c92e51b5ba880c6e0108e5bdb941a72d65778df812d2f7b33eac4886796d623d"
+    },
+    {
+      "path": "evals/plans/0037-sat-foundation.md",
+      "sha256": "3c628abe9371bff8b2013c45320bbedfda4b2a82c53e20db6b5225d503d7b50a"
+    },
+    {
+      "path": "evals/plans/0037-sat-protocol.md",
+      "sha256": "431829bdfb3bc55932f789c461cfeae22ba0030f049c6b5092c074e63942d7d1"
+    },
+    {
+      "path": "evals/sat-foundation/browser-entry.ts",
+      "sha256": "deb24c9e0b8407c8522b6be5b86481cb07a0b257ba8e851b96c3d11f5192a76d"
+    },
+    {
+      "path": "evals/sat-foundation/browser.spec.ts",
+      "sha256": "4708b7390a561c3e4280255d2a7a8ae08e325f1ca257dc5c25080add93e64441"
+    },
+    {
+      "path": "evals/sat-foundation/contract-test.ts",
+      "sha256": "3866815f19f543b4275bb7d66cc6bfacd80bfc8f1f380de116c60ef1ae704457"
+    },
+    {
+      "path": "evals/sat-foundation/corpus.ts",
+      "sha256": "93a712c683a8da6d86175f5da03764c62d885a120aa9e64f705eba31deef7384"
+    },
+    {
+      "path": "evals/sat-foundation/native.ts",
+      "sha256": "838c3fef3fd63aaa35246b0ecc62c84e58a85effed8d6e3c275d481b774deaa6"
+    },
+    {
+      "path": "evals/sat-foundation/oracle.ts",
+      "sha256": "bba1d307d25d0e1858e65b408b29aa2bd766155be0c2e1c22f0160e76f24b3ad"
+    },
+    {
+      "path": "evals/sat-foundation/provenance.ts",
+      "sha256": "f25f1977a5e4134b57cbbcc7cba78d3f8ac20d348888e883001ce02f4c943f49"
+    },
+    {
+      "path": "evals/sat-foundation/replay.ts",
+      "sha256": "bc854a1b9ce66692842eb6bb82d84d76f2c629cd98874f94934aecffdb0f00d2"
+    },
+    {
+      "path": "evals/sat-foundation/run.ts",
+      "sha256": "93b1247af5b2ce2fed59abc457aac76993e7c3f9df1578e9a245ba836f5d9bc9"
+    },
+    {
+      "path": "evals/sat-foundation/rust/Cargo.lock",
+      "sha256": "892e8e7ed0f07afa3959c4e27ffbce0926ed7228b0754528831e3a1657ce9eba"
+    },
+    {
+      "path": "evals/sat-foundation/rust/Cargo.toml",
+      "sha256": "b6b8dc64ce8519cf8c9837ead962c67fa9691dc7f834afe19b38003bc4f7205c"
+    },
+    {
+      "path": "evals/sat-foundation/rust/src/lib.rs",
+      "sha256": "d37f452e0984d5f43a9754bdc3cddf1096affbb39c14191c0ed0057468fd68a0"
+    },
+    {
+      "path": "evals/sat-foundation/rust/src/main.rs",
+      "sha256": "4dca340d8f1889a309e929f7714ffaeacaedbbd9db829701ef81a4fac663f0a7"
+    },
+    {
+      "path": "evals/sat-foundation/rust/src/wasm.rs",
+      "sha256": "61af40325aefbbbd46fedb64fafa451b99fdd711f6cb34a275e0660f554b6205"
+    },
+    {
+      "path": "evals/sat-foundation/rust/tests/solver.rs",
+      "sha256": "98a2351f30d5dafd8e703333f95dc79b1e34b6061628eb5485f8f91085b8d5a8"
+    },
+    {
+      "path": "evals/sat-foundation/source-review.ts",
+      "sha256": "7e141cdd8096179b69340b313b5710a8d7363662a4bb1037d2905dedeede029e"
+    },
+    {
+      "path": "evals/sat-foundation/verify.ts",
+      "sha256": "c31e91c34dfbbc0c1ef2ba67e40c81d2e8295173fb872d2a4e4828bf23244961"
+    },
+    {
+      "path": "evals/sat-foundation/wasm.ts",
+      "sha256": "063936f9e42bcf5ce8150ddd40ccf2c0c6fde2d98d800c778186221c83fc4d62"
+    },
+    {
+      "path": "justfile",
+      "sha256": "938d503bc5ccd861a768885c3697acf939278bf90a4fa7c99b67c211dc6910d1"
+    },
+    {
+      "path": "package.json",
+      "sha256": "99aa0f5b95329bc25d677c49921698731c5c9ae103fdcd22109c1c13c1965078"
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "sha256": "27d1f2216d738d57e5a7a277158ba006f03e821df60606865915c54884fd6274"
+    },
+    {
+      "path": "sat-playwright.config.ts",
+      "sha256": "c0b37f1fa23977d08a69d36a64f6060a6978fae7fcbf135d2fcc37c6d9816f7e"
+    },
+    {
+      "path": "tsconfig.build.json",
+      "sha256": "d4e5348b7e9c8685110feabc9d2ff878d8bf235e0f778a5b230adbffcb7b520f"
+    },
+    {
+      "path": "tsconfig.json",
+      "sha256": "002e2f5c7e99896b3a6853d651b4ee4b3c5a92d5cce156a60ef0c371dd5a6410"
+    }
+  ],
+  "sourceVersion": "c4de8f9b0dc5ca6044b5a876e9e52b36db562971d50b46b22b12bbfeb7bb476c",
+  "phase": "development",
+  "seed": 14241,
+  "count": 64,
+  "parent": "",
+  "binaries": [
+    {
+      "path": "evals/sat-foundation/rust/target/release/idealis-sat-eval",
+      "sha256": "2f67c2a5d0efb14eaa85559b5512afc6d23ec6c48ffc53f4a05d36d862567639",
+      "bytes": 484800
+    },
+    {
+      "path": "evals/sat-foundation/rust/target/wasm32-unknown-unknown/release/idealis_sat_eval.wasm",
+      "sha256": "5ac9d87c4d71e26fa74c0b345d1a28900fd2fde15609e9008b33cee72554ba15",
+      "bytes": 282868
+    }
+  ],
+  "commit": "ee21454b4a5172b5a58b96f9a7c962949d300935",
+  "dirtyPaths": "",
+  "environment": {
+    "node": "v24.22.2",
+    "platform": "darwin",
+    "arch": "arm64",
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: aarch64-apple-darwin\nrelease: 1.98.0\nLLVM version: 22.1.8"
+  },
+  "comparison": "native/Wasm statuses vs independent complete enumeration, both concrete models validated, self-checking enabled"
+}

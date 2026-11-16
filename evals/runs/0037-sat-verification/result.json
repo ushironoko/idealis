@@ -1,0 +1,88 @@
+{
+  "status": "complete",
+  "sourceVersion": "c4de8f9b0dc5ca6044b5a876e9e52b36db562971d50b46b22b12bbfeb7bb476c",
+  "commit": "ee21454b4a5172b5a58b96f9a7c962949d300935",
+  "checks": [
+    {
+      "command": "just sat-test",
+      "exitCode": 0,
+      "log": "sat-test.log"
+    },
+    {
+      "command": "just sat-browser",
+      "exitCode": 0,
+      "log": "browser-recorded.log"
+    },
+    {
+      "command": "just check",
+      "exitCode": 0,
+      "log": "check.log"
+    },
+    {
+      "command": "just browser",
+      "exitCode": 0,
+      "log": "core-browser.log"
+    },
+    {
+      "command": "just runtime-build",
+      "exitCode": 0,
+      "log": "runtime-build.log"
+    },
+    {
+      "command": "just runtime-test",
+      "exitCode": 0,
+      "log": "runtime-test.log"
+    },
+    {
+      "command": "just evaluate",
+      "exitCode": 0,
+      "log": "evaluate.log"
+    },
+    {
+      "command": "just replay-evaluation",
+      "exitCode": 0,
+      "log": "evaluate-replay.log"
+    },
+    {
+      "command": "just sat-replay evals/runs/0037-sat-development",
+      "exitCode": 0,
+      "log": "development-replay.log"
+    },
+    {
+      "command": "just sat-replay evals/runs/0037-sat-confirmation",
+      "exitCode": 0,
+      "log": "confirmation-replay.log"
+    }
+  ],
+  "binaries": [
+    {
+      "path": "evals/sat-foundation/rust/target/release/idealis-sat-eval",
+      "sha256": "2f67c2a5d0efb14eaa85559b5512afc6d23ec6c48ffc53f4a05d36d862567639",
+      "bytes": 484800
+    },
+    {
+      "path": "evals/sat-foundation/rust/target/wasm32-unknown-unknown/release/idealis_sat_eval.wasm",
+      "sha256": "5ac9d87c4d71e26fa74c0b345d1a28900fd2fde15609e9008b33cee72554ba15",
+      "bytes": 282868
+    }
+  ],
+  "files": [
+    {
+      "path": "logs.json.gz",
+      "sha256": "aed8bf2855b6c5de31cb25b5d27c2a2aef2e2e78d6d621c323adf7798e11ecb8"
+    },
+    {
+      "path": "source-review.json",
+      "sha256": "211aadead4a5f56596859cdaaf57163302588897a0de647dd7fbe6cb45089a21"
+    },
+    {
+      "path": "browser-records.json.gz",
+      "sha256": "7b52bad4635eca625cfc1c118d4885d829475085d5cce2a74deae04315eb9a32"
+    }
+  ],
+  "notes": [
+    "Raw initial Red logs are retained as expected development failures",
+    "No solver timing comparison or general SAT proof",
+    "Source review covers pinned Varisat 0.2.2 and does not implement a proof processor budget adapter"
+  ]
+}

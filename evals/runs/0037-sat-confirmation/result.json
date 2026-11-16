@@ -1,0 +1,21 @@
+{
+  "status": "complete",
+  "sourceVersion": "c4de8f9b0dc5ca6044b5a876e9e52b36db562971d50b46b22b12bbfeb7bb476c",
+  "inputs": 128,
+  "rounds": 375,
+  "sat": 137,
+  "unsat": 238,
+  "controls": 6,
+  "imports": [],
+  "elapsedMs": 192.41920900000002,
+  "files": [
+    {
+      "path": "manifest.json",
+      "sha256": "adc07fb49c4acecbd1cae096d1ecf6b4a9e7093b84c69e56300b08fae446cd56"
+    },
+    {
+      "path": "records.json.gz",
+      "sha256": "499b9f7c7dd02c255730067ae2c196afd1117814cf9d67ee19469e99620fefe4"
+    }
+  ]
+}

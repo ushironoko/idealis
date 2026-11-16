@@ -126,3 +126,7 @@
 {"runId":"0036-testing-development","kind":"testing-core","status":"complete","sourceVersion":"abf6736b4c094ed0cb4ed698a95dd69a55248793d13cc2d59550f74600aa6393"}
 {"runId":"0036-testing-confirmation","kind":"testing-core","status":"complete","sourceVersion":"abf6736b4c094ed0cb4ed698a95dd69a55248793d13cc2d59550f74600aa6393"}
 {"runId": "0036-testing-verification", "kind": "testing-core-verification", "status": "complete", "sourceVersion": "abf6736b4c094ed0cb4ed698a95dd69a55248793d13cc2d59550f74600aa6393"}
+{"runId":"0037-sat-development","kind":"sat-foundation","status":"complete","sourceVersion":"c4de8f9b0dc5ca6044b5a876e9e52b36db562971d50b46b22b12bbfeb7bb476c"}
+{"runId":"0037-sat-confirmation","kind":"sat-foundation","status":"complete","sourceVersion":"c4de8f9b0dc5ca6044b5a876e9e52b36db562971d50b46b22b12bbfeb7bb476c"}
+{"runId":"0037-sat-verification","kind":"sat-foundation-verification","status":"complete","sourceVersion":"c4de8f9b0dc5ca6044b5a876e9e52b36db562971d50b46b22b12bbfeb7bb476c"}
+{"runId":"0037-sat-final-verification","kind":"sat-foundation-verification","status":"complete","sourceVersion":"c4de8f9b0dc5ca6044b5a876e9e52b36db562971d50b46b22b12bbfeb7bb476c"}

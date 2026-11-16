@@ -1,0 +1,24 @@
+{
+  "status": "complete",
+  "sourceVersion": "c4de8f9b0dc5ca6044b5a876e9e52b36db562971d50b46b22b12bbfeb7bb476c",
+  "checks": [
+    {
+      "command": "pnpm check after documentation",
+      "exitCode": 1,
+      "reason": "Markdown table format in new iteration document",
+      "log": "red"
+    },
+    {
+      "command": "just check after formatting",
+      "exitCode": 0,
+      "log": "green"
+    }
+  ],
+  "files": [
+    {
+      "path": "logs.json.gz",
+      "sha256": "e421cd22765d9a58190b8955cb384df1a42bc09644e76add27533c02d021d5a3"
+    }
+  ],
+  "note": "Documentation-only correction after the code verification. Evaluation sources and runs remain unchanged"
+}
