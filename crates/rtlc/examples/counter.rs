@@ -55,6 +55,7 @@ pub fn ring() -> SafetyProgram {
         action_properties: vec![],
         properties: vec![],
         fairness: vec![],
+        operators: vec![],
     }
 }
 #[cfg(not(test))]

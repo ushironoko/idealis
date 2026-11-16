@@ -54,6 +54,22 @@ pub enum Expression {
         bounds: Vec<Binding>,
         body: Box<Self>,
     },
+    Let {
+        slot: usize,
+        value: Box<Self>,
+        body: Box<Self>,
+    },
+    Call {
+        operator: usize,
+        args: Vec<Self>,
+    },
+    Fold {
+        accumulator: usize,
+        initial: Box<Self>,
+        collection: Box<Self>,
+        order: FoldOrder,
+        body: Box<Self>,
+    },
     Domain {
         argument: Box<Self>,
     },
@@ -196,6 +212,13 @@ pub enum Expression {
     },
 }
 
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "kebab-case")]
+pub enum FoldOrder {
+    SetMembers,
+    SequenceLeft,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Domain {
@@ -231,6 +254,11 @@ pub enum Step {
         slot: usize,
         domain: Domain,
     },
+    Let {
+        slot: usize,
+        value: Expression,
+        stable: bool,
+    },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -264,6 +292,15 @@ pub struct Predicate {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OperatorDefinition {
+    pub name: String,
+    pub arity: usize,
+    pub phase: u8,
+    pub body: Expression,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct SafetyProgram {
     pub format: String,
@@ -283,6 +320,8 @@ pub struct SafetyProgram {
     pub properties: Vec<TemporalProperty>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fairness: Vec<TemporalFormula>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub operators: Vec<OperatorDefinition>,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]

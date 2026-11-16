@@ -3,7 +3,7 @@ use rtla::ast::{
     Pattern,
 };
 use serde_json::{Value as Json, json};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CompileError {
@@ -39,8 +39,8 @@ struct Context {
 }
 impl Context {
     fn nested(&self) -> Result<Self> {
-        if self.depth >= 40 {
-            return unsupported("expression or operator nesting exceeds 40");
+        if self.depth >= 1000 {
+            return unsupported("expression or operator nesting exceeds 1000");
         }
         Ok(Self {
             depth: self.depth + 1,
@@ -60,6 +60,57 @@ struct Compiler<'a> {
     slots: BTreeMap<String, usize>,
     constants: BTreeMap<String, ConfigValue>,
     scopes: Vec<BTreeMap<String, Entry>>,
+    operators: Vec<Json>,
+    operator_index: HashMap<(String, u8), usize>,
+    in_progress: HashSet<(String, u8)>,
+    action_free: HashMap<String, bool>,
+}
+fn phase_code(phase: Phase) -> u8 {
+    match phase {
+        Phase::Initial => 0,
+        Phase::Next => 1,
+        Phase::State => 2,
+        Phase::Constant => 3,
+    }
+}
+fn scan_names(value: &Json, names: &mut Vec<String>, size: &mut usize) -> bool {
+    match value {
+        Json::Object(map) => {
+            if let Some(kind) = map.get("kind").and_then(Json::as_str) {
+                *size += 1;
+                if [
+                    "Prime",
+                    "Unchanged",
+                    "Enabled",
+                    "Always",
+                    "Eventually",
+                    "BoxAction",
+                    "AngleAction",
+                    "WeakFairness",
+                    "StrongFairness",
+                ]
+                .contains(&kind)
+                    || (kind == "UnboundedQuantifier"
+                        && map.get("isTemporal") == Some(&json!(true)))
+                {
+                    return false;
+                }
+                if kind == "Identifier"
+                    && let Some(name) = map.get("name").and_then(Json::as_str)
+                {
+                    names.push(name.into());
+                }
+                if kind == "Apply"
+                    && let Some(name) = map.get("operator").and_then(Json::as_str)
+                {
+                    names.push(name.into());
+                }
+            }
+            map.values().all(|inner| scan_names(inner, names, size))
+        }
+        Json::Array(values) => values.iter().all(|inner| scan_names(inner, names, size)),
+        _ => true,
+    }
 }
 fn boolean(value: bool) -> Json {
     json!({"op":"literal","value":{"type":"bool","value":value}})
@@ -265,6 +316,10 @@ pub fn compile(module: &Module, config: &Config) -> Result<rtlc::SafetyProgram> 
             .map(|(slot, value)| (value.name.clone(), slot))
             .collect(),
         scopes: vec![entries],
+        operators: vec![],
+        operator_index: HashMap::new(),
+        in_progress: HashSet::new(),
+        action_free: HashMap::new(),
     };
     let value = compiler.program()?;
     serde_json::from_value(value).map_err(|error| CompileError {
@@ -293,6 +348,100 @@ impl Compiler<'_> {
         self.module.extends.iter().any(|name| {
             ["Naturals", "Integers", "Sequences", "FiniteSets"].contains(&name.as_str())
         })
+    }
+    fn top_level_action_free(&mut self, name: &str) -> (bool, usize) {
+        let Some(entry) = self.scopes[0].get(name) else {
+            return (true, 0);
+        };
+        let definition = entry.definition.clone();
+        let tree = serde_json::to_value(&definition.body).unwrap_or(Json::Null);
+        let mut names = vec![];
+        let mut size = 0;
+        if !scan_names(&tree, &mut names, &mut size) {
+            return (false, size);
+        }
+        if let Some(result) = self.action_free.get(name) {
+            return (*result, size);
+        }
+        self.action_free.insert(name.into(), true);
+        for referenced in names {
+            if referenced != name
+                && self.scopes[0].contains_key(&referenced)
+                && !self.top_level_action_free(&referenced).0
+            {
+                self.action_free.insert(name.into(), false);
+                return (false, size);
+            }
+        }
+        (true, size)
+    }
+    fn shareable(&mut self, name: &str, context: &Context) -> bool {
+        if context.locals.contains_key(name) {
+            return false;
+        }
+        let Some(entry) = self.scopes[context.scope].get(name) else {
+            return false;
+        };
+        if entry.scope != 0 || entry.definition.is_recursive {
+            return false;
+        }
+        let DefinitionKind::Operator { params } = &entry.definition.head else {
+            return false;
+        };
+        if params.iter().any(|param| param.arity != 0) {
+            return false;
+        }
+        let (free, size) = self.top_level_action_free(name);
+        free && size >= 12
+    }
+    fn shared_call(
+        &mut self,
+        name: &str,
+        args: &[Expression],
+        context: &Context,
+        child: &Context,
+    ) -> Result<Json> {
+        let index = self.shared_operator(name, context.phase)?;
+        let args = self.expressions(args, child)?;
+        Ok(json!({"op":"call","operator":index,"args":args}))
+    }
+    fn shared_operator(&mut self, name: &str, phase: Phase) -> Result<usize> {
+        let key = (name.to_string(), phase_code(phase));
+        if let Some(index) = self.operator_index.get(&key) {
+            return Ok(*index);
+        }
+        if !self.in_progress.insert(key.clone()) {
+            return unsupported(format!("operator {name}"));
+        }
+        let entry = self.scopes[0]
+            .get(name)
+            .cloned()
+            .ok_or_else(|| CompileError {
+                message: format!("operator {name}"),
+            })?;
+        let DefinitionKind::Operator { params } = &entry.definition.head else {
+            return unsupported(format!("operator {name}"));
+        };
+        let locals = params
+            .iter()
+            .enumerate()
+            .map(|(slot, param)| (param.name.clone(), json!({"op":"bound","slot":slot})))
+            .collect();
+        let context = Context {
+            phase,
+            locals,
+            calls: vec![name.into()],
+            depth: 0,
+            bound: params.len(),
+            scope: 0,
+        };
+        let body = self.expression(&entry.definition.body, &context)?;
+        self.in_progress.remove(&key);
+        let index = self.operators.len();
+        self.operators
+            .push(json!({"name":name,"arity":params.len(),"phase":phase_code(phase),"body":body}));
+        self.operator_index.insert(key, index);
+        Ok(index)
     }
     fn call(
         &mut self,
@@ -371,8 +520,8 @@ impl Compiler<'_> {
         let mut child = context.clone();
         let mut bindings = vec![];
         for bound in bounds {
-            if child.bound >= 40 {
-                return unsupported("more than 40 bound variables");
+            if child.bound >= 1000 {
+                return unsupported("more than 1000 bound variables");
             }
             let slot = child.bound;
             let mut binding = json!({"slot":slot,"domain":self.domain(&bound.set,context,true)?});
@@ -468,8 +617,38 @@ impl Compiler<'_> {
                         json!({"op":"read","slot":slot,"next":context.phase == Phase::Initial}),
                     );
                 }
+                if self.shareable(name, context) {
+                    return self.shared_call(name, &[], context, &child);
+                }
                 let (body, expanded) = self.call(name, &[], context)?;
                 self.expression(&body, &expanded)
+            }
+            E::Let { definitions, body }
+                if definitions.iter().all(|definition| {
+                    !definition.is_recursive
+                        && matches!(&definition.head, DefinitionKind::Operator { params } if params.is_empty())
+                }) =>
+            {
+                let mut current = child.clone();
+                let mut bindings = vec![];
+                for definition in definitions {
+                    if current.bound >= 1000 {
+                        return unsupported("more than 1000 bound variables");
+                    }
+                    let slot = current.bound;
+                    let value = self.expression(&definition.body, &current)?;
+                    current = current.nested()?;
+                    current
+                        .locals
+                        .insert(definition.name.clone(), json!({"op":"bound","slot":slot}));
+                    current.bound = slot + 1;
+                    bindings.push((slot, value));
+                }
+                let mut result = self.expression(body, &current)?;
+                for (slot, value) in bindings.into_iter().rev() {
+                    result = json!({"op":"let","slot":slot,"value":value,"body":result});
+                }
+                Ok(result)
             }
             E::Let { definitions, body } => {
                 let expanded = self.let_context(definitions, context)?;
@@ -576,6 +755,16 @@ impl Compiler<'_> {
                 }
                 Ok(result)
             }
+            E::Case { arms, other: None } if !arms.is_empty() => {
+                let (last, rest) = arms.split_last().ok_or_else(|| CompileError {
+                    message: "empty CASE".into(),
+                })?;
+                let mut result = self.expression(&last.body, &child)?;
+                for arm in rest.iter().rev() {
+                    result = json!({"op":"if","condition":self.expression(&arm.condition,&child)?,"consequent":self.expression(&arm.body,&child)?,"alternative":result});
+                }
+                Ok(result)
+            }
             E::And { operands, .. } | E::Or { operands, .. } => {
                 let and = matches!(value.node, E::And { .. });
                 let mut result = boolean(and);
@@ -600,6 +789,64 @@ impl Compiler<'_> {
             )),
         }
     }
+    fn fold(
+        &mut self,
+        sequence: bool,
+        args: &[Expression],
+        context: &Context,
+        child: &Context,
+    ) -> Result<Json> {
+        let E::Identifier { name } = &args[0].node else {
+            return unsupported("fold operator argument");
+        };
+        if context.locals.contains_key(name) {
+            return unsupported(format!("fold operator {name}"));
+        }
+        let entry = self.scopes[context.scope]
+            .get(name)
+            .cloned()
+            .ok_or_else(|| CompileError {
+                message: format!("operator {name}"),
+            })?;
+        if entry.definition.is_recursive || context.calls.iter().any(|item| item == name) {
+            return unsupported(format!("operator {name}"));
+        }
+        let DefinitionKind::Operator { params } = &entry.definition.head else {
+            return unsupported(format!("fold operator {name}"));
+        };
+        if params.len() != 2 || params.iter().any(|param| param.arity != 0) {
+            return unsupported(format!("fold operator {name}"));
+        }
+        let accumulator = context.bound;
+        if accumulator + 2 > 1000 {
+            return unsupported("more than 1000 bound variables");
+        }
+        let initial = self.expression(&args[1], child)?;
+        let collection = self.expression(&args[2], child)?;
+        let mut locals = entry.locals;
+        locals.insert(
+            params[0].name.clone(),
+            json!({"op":"bound","slot":accumulator}),
+        );
+        locals.insert(
+            params[1].name.clone(),
+            json!({"op":"bound","slot":accumulator + 1}),
+        );
+        let mut inner = child.nested()?;
+        inner.locals = locals;
+        inner.scope = entry.scope;
+        inner.calls.push(name.clone());
+        inner.bound = accumulator + 2;
+        let body = self.expression(&entry.definition.body, &inner)?;
+        Ok(json!({
+            "op": "fold",
+            "accumulator": accumulator,
+            "initial": initial,
+            "collection": collection,
+            "order": if sequence { "sequence-left" } else { "set-members" },
+            "body": body,
+        }))
+    }
     fn key(&mut self, args: &[Expression], context: &Context) -> Result<Json> {
         if args.len() == 1 {
             self.expression(&args[0], context)
@@ -614,7 +861,16 @@ impl Compiler<'_> {
         context: &Context,
         child: &Context,
     ) -> Result<Json> {
+        if ["ApaFoldSet", "ApaFoldSeqLeft"].contains(&operator)
+            && args.len() == 3
+            && !self.has(context, operator)
+        {
+            return self.fold(operator == "ApaFoldSeqLeft", args, context, child);
+        }
         if self.has(context, operator) {
+            if self.shareable(operator, context) {
+                return self.shared_call(operator, args, context, child);
+            }
             let (body, expanded) = self.call(operator, args, context)?;
             return self.expression(&body, &expanded);
         }
@@ -795,6 +1051,36 @@ impl Compiler<'_> {
                 let (body, expanded) = self.call(operator, args, context)?;
                 self.action(&body, &expanded, operator)
             }
+            E::Let { definitions, body }
+                if definitions.iter().all(|definition| {
+                    !definition.is_recursive
+                        && matches!(&definition.head, DefinitionKind::Operator { params } if params.is_empty())
+                }) =>
+            {
+                let mut current = child.clone();
+                let mut prefix = vec![];
+                for definition in definitions {
+                    if current.bound >= 1000 {
+                        return unsupported("more than 1000 bound variables");
+                    }
+                    let slot = current.bound;
+                    let value = self.expression(&definition.body, &current)?;
+                    let stable = level(&value) <= 1;
+                    prefix.push(json!({"kind":"let","slot":slot,"value":value,"stable":stable}));
+                    current = current.nested()?;
+                    current
+                        .locals
+                        .insert(definition.name.clone(), json!({"op":"bound","slot":slot}));
+                    current.bound = slot + 1;
+                }
+                let mut branches = self.action(body, &current, name)?;
+                for branch in &mut branches {
+                    let mut joined = prefix.clone();
+                    joined.extend(steps(branch)?.clone());
+                    branch["steps"] = json!(joined);
+                }
+                limited(branches)
+            }
             E::Let { definitions, body } => {
                 let expanded = self.let_context(definitions, context)?;
                 self.action(body, &expanded, name)
@@ -831,7 +1117,7 @@ impl Compiler<'_> {
                         let bound = context.bound
                             + steps(branch)?
                                 .iter()
-                                .filter(|step| step["kind"] == "bind")
+                                .filter(|step| step["kind"] == "bind" || step["kind"] == "let")
                                 .count();
                         for mut addition in self.action(
                             operand,
@@ -867,6 +1153,42 @@ impl Compiler<'_> {
                 ] {
                     for mut branch in self.action(body, &child, name)? {
                         let mut joined = vec![json!({"kind":"guard","expression":guard})];
+                        joined.extend(steps(&branch)?.clone());
+                        branch["steps"] = json!(joined);
+                        result.push(branch);
+                    }
+                }
+                limited(result)
+            }
+            E::Case { arms, other } if !arms.is_empty() => {
+                let mut result = vec![];
+                let mut previous: Vec<Json> = vec![];
+                for arm in arms {
+                    let condition = self.expression(&arm.condition, &child)?;
+                    let mut guards: Vec<Json> = previous
+                        .iter()
+                        .map(|earlier| json!({"op":"not","argument":earlier}))
+                        .collect();
+                    guards.push(condition.clone());
+                    for mut branch in self.action(&arm.body, &child, name)? {
+                        let mut joined: Vec<Json> = guards
+                            .iter()
+                            .map(|guard| json!({"kind":"guard","expression":guard}))
+                            .collect();
+                        joined.extend(steps(&branch)?.clone());
+                        branch["steps"] = json!(joined);
+                        result.push(branch);
+                    }
+                    previous.push(condition);
+                    result = limited(result)?;
+                }
+                if let Some(other) = other {
+                    let guards: Vec<Json> = previous
+                        .iter()
+                        .map(|earlier| json!({"kind":"guard","expression":{"op":"not","argument":earlier}}))
+                        .collect();
+                    for mut branch in self.action(other, &child, name)? {
+                        let mut joined = guards.clone();
                         joined.extend(steps(&branch)?.clone());
                         branch["steps"] = json!(joined);
                         result.push(branch);
@@ -1161,6 +1483,9 @@ impl Compiler<'_> {
         if !properties.is_empty() {
             result["properties"] = json!(properties);
             result["fairness"] = json!(fairness);
+        }
+        if !self.operators.is_empty() {
+            result["operators"] = json!(self.operators);
         }
         Ok(result)
     }

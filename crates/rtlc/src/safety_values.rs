@@ -78,6 +78,7 @@ pub(crate) struct Arena<'a> {
     membership: MembershipCache,
     pub work: u32,
     maximum: u32,
+    pub operators: &'a [crate::ir::OperatorDefinition],
 }
 
 impl<'scope> Arena<'scope> {
@@ -97,6 +98,7 @@ impl<'scope> Arena<'scope> {
             membership: HashMap::new(),
             work: 0,
             maximum,
+            operators: &[],
         }
     }
     pub fn tick(&mut self) -> Result<(), CoreError> {
@@ -126,6 +128,7 @@ impl<'scope> Arena<'scope> {
             base: Some(self),
             offset: self.offset + self.cells.len(),
             budget: Some((budget, worker)),
+            operators: self.operators,
             ..Arena::new(self.maximum)
         }
     }

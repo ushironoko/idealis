@@ -128,6 +128,7 @@ impl SafetyProgram {
             return Err(CoreError::protocol("Invalid safety program or bounds"));
         }
         let mut arena = Arena::new(bounds.max_work);
+        arena.operators = &self.operators;
         let mut search = Search {
             program: self,
             bounds,
@@ -170,6 +171,17 @@ impl<'program> Search<'program> {
         let program = self.program;
         validate_branches(&program.initial, program.variables.len(), 0, 0)?;
         validate_branches(&program.next, program.variables.len(), 1, 0)?;
+        for definition in &program.operators {
+            if definition.phase > 3 || definition.arity > 256 {
+                return Err(CoreError::protocol("Invalid operator definition"));
+            }
+            definition.body.validate_with_locals(
+                program.variables.len(),
+                definition.phase,
+                definition.arity,
+            )?;
+            arena.register_memberships(&definition.body);
+        }
         crate::safety_expressions::register_branch_memberships(
             &program.initial,
             &mut |expression| arena.register_memberships(expression),

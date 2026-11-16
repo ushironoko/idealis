@@ -1,5 +1,5 @@
 use crate::CoreError;
-use crate::ir::{Binding, Branch, Domain, Expression, Scalar, Step};
+use crate::ir::{Binding, Branch, Domain, Expression, FoldOrder, Scalar, Step};
 use crate::safety_values::Arena;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::safety_values::ValueRemap;
@@ -14,6 +14,62 @@ pub(crate) struct EvalContext<'a> {
     pub locals: &'a [Scalar],
     pub old: Option<Scalar>,
     pub prime: bool,
+    pub lazy: Option<&'a LazyFrame<'a>>,
+}
+
+pub(crate) struct LazyFrame<'a> {
+    slot: usize,
+    value: &'a Expression,
+    ctx: EvalContext<'a>,
+    cache: std::cell::Cell<Option<Scalar>>,
+    parent: Option<&'a LazyFrame<'a>>,
+    stable: bool,
+}
+
+impl LazyFrame<'_> {
+    fn force(&self, next: &[Option<Scalar>], arena: &mut Arena) -> Result<Scalar, CoreError> {
+        if let Some(value) = self.cache.get() {
+            return Ok(value);
+        }
+        let value = self.value.eval(EvalContext { next, ..self.ctx }, arena)?;
+        if self.stable {
+            self.cache.set(Some(value));
+        }
+        Ok(value)
+    }
+}
+
+fn bind_arguments<'c>(
+    index: usize,
+    args: &'c [Expression],
+    caller: EvalContext<'c>,
+    chain: Option<&'c LazyFrame<'c>>,
+    body: &'c Expression,
+    locals: &'c [Scalar],
+    arena: &mut Arena,
+) -> Result<Scalar, CoreError> {
+    let Some(value) = args.get(index) else {
+        return body.eval(
+            EvalContext {
+                current: caller.current,
+                next: caller.next,
+                locals,
+                old: None,
+                prime: caller.prime,
+                lazy: chain,
+            },
+            arena,
+        );
+    };
+    let frame = LazyFrame {
+        slot: index,
+        value,
+        ctx: caller,
+        cache: std::cell::Cell::new(None),
+        parent: chain,
+        stable: true,
+    };
+    bind_arguments(index + 1, args, caller, Some(&frame), body, locals, arena)
 }
 impl<'a> EvalContext<'a> {
     pub fn new(current: &'a [Scalar], next: &'a [Option<Scalar>]) -> Self {
@@ -23,6 +79,7 @@ impl<'a> EvalContext<'a> {
             locals: &[],
             old: None,
             prime: false,
+            lazy: None,
         }
     }
     fn read(self, slot: usize, next: bool) -> Result<Scalar, CoreError> {
@@ -71,6 +128,7 @@ pub(crate) fn register_branch_memberships<'a>(
                 | Step::Assign {
                     value: expression, ..
                 } => visitor(expression),
+                Step::Let { value, .. } => register_memberships(value, visitor),
                 Step::Bind { domain, .. } | Step::Choose { domain, .. } => {
                     for expression in domain.children() {
                         visitor(expression);
@@ -213,6 +271,13 @@ pub(crate) fn validate_branches(
                     }
                     domain.validate(context)?;
                 }
+                Step::Let { slot, value, .. } => {
+                    if *slot != context.locals {
+                        return Err(CoreError::protocol("Invalid let variable slot"));
+                    }
+                    value.validate_with(context)?;
+                    context.locals += 1;
+                }
                 Step::Bind {
                     slot,
                     domain,
@@ -336,6 +401,14 @@ impl Expression {
                 children.push(body);
                 children
             }
+            Self::Fold {
+                initial,
+                collection,
+                body,
+                ..
+            } => vec![initial, collection, body],
+            Self::Let { value, body, .. } => vec![value, body],
+            Self::Call { args, .. } => args.iter().collect(),
             Self::Subseq { sequence, from, to } => vec![sequence, from, to],
             Self::Enabled { .. } => vec![],
         }
@@ -348,14 +421,31 @@ impl Expression {
                 | Self::Bound { .. }
                 | Self::Old
                 | Self::Prime { .. }
+                | Self::Call { .. }
                 | Self::Literal {
                     value: Scalar::Ref(_)
                 }
         ) && self.children().iter().all(|child| child.is_context_free())
     }
     pub(crate) fn is_constant(&self) -> bool {
-        !matches!(self, Self::Read { .. } | Self::Enabled { .. })
-            && self.children().iter().all(|value| value.is_constant())
+        !matches!(
+            self,
+            Self::Read { .. } | Self::Enabled { .. } | Self::Call { .. }
+        ) && self.children().iter().all(|value| value.is_constant())
+    }
+    pub(crate) fn validate_with_locals(
+        &self,
+        variables: usize,
+        phase: u8,
+        locals: usize,
+    ) -> Result<(), CoreError> {
+        self.validate_with(Validation {
+            variables,
+            phase,
+            depth: 0,
+            locals,
+            old: false,
+        })
     }
     pub(crate) fn validate(
         &self,
@@ -372,8 +462,10 @@ impl Expression {
         })
     }
     fn validate_with(&self, ctx: Validation) -> Result<(), CoreError> {
-        if ctx.depth > 48 {
-            return Err(CoreError::protocol("Safety expression nesting exceeds 48"));
+        if ctx.depth > 1000 {
+            return Err(CoreError::protocol(
+                "Safety expression nesting exceeds 1000",
+            ));
         }
         match self {
             Self::Prime { argument } => {
@@ -425,6 +517,33 @@ impl Expression {
                 body.validate_with(child)?;
                 return Ok(());
             }
+            Self::Let { slot, value, body } => {
+                if *slot != ctx.locals {
+                    return Err(CoreError::protocol("Invalid let variable slot"));
+                }
+                value.validate_with(ctx.child())?;
+                let mut child = ctx.child();
+                child.locals += 1;
+                body.validate_with(child)?;
+                return Ok(());
+            }
+            Self::Fold {
+                accumulator,
+                initial,
+                collection,
+                body,
+                ..
+            } => {
+                if *accumulator != ctx.locals {
+                    return Err(CoreError::protocol("Invalid fold variable slot"));
+                }
+                initial.validate_with(ctx.child())?;
+                collection.validate_with(ctx.child())?;
+                let mut child = ctx.child();
+                child.locals += 2;
+                body.validate_with(child)?;
+                return Ok(());
+            }
             Self::Update { target, updates } => {
                 target.validate_with(ctx.child())?;
                 for update in updates {
@@ -473,11 +592,19 @@ impl Expression {
         match self {
             Self::Literal { value } => Ok(*value),
             Self::Read { slot, next } => ctx.read(*slot, *next),
-            Self::Bound { slot } => ctx
-                .locals
-                .get(*slot)
-                .copied()
-                .ok_or_else(|| CoreError::protocol("Unbound quantified variable")),
+            Self::Bound { slot } => {
+                let mut frame = ctx.lazy;
+                while let Some(current) = frame {
+                    if current.slot == *slot {
+                        return current.force(ctx.next, arena);
+                    }
+                    frame = current.parent;
+                }
+                ctx.locals
+                    .get(*slot)
+                    .copied()
+                    .ok_or_else(|| CoreError::protocol("Unbound quantified variable"))
+            }
             Self::Old => ctx
                 .old
                 .ok_or_else(|| CoreError::protocol("Unbound EXCEPT @")),
@@ -648,6 +775,73 @@ impl Expression {
                 } else {
                     arena.set(values)?
                 }
+            }
+            Self::Let { slot, value, body } => {
+                if *slot != ctx.locals.len() {
+                    return Err(CoreError::protocol("Invalid let variable slot"));
+                }
+                let frame = LazyFrame {
+                    slot: *slot,
+                    value,
+                    ctx,
+                    cache: std::cell::Cell::new(None),
+                    parent: ctx.lazy,
+                    stable: true,
+                };
+                let mut locals = ctx.locals.to_vec();
+                locals.push(Scalar::Bool(false));
+                body.eval(
+                    EvalContext {
+                        locals: &locals,
+                        lazy: Some(&frame),
+                        ..ctx
+                    },
+                    arena,
+                )?
+            }
+            Self::Call { operator, args } => {
+                let operators = arena.operators;
+                let definition = operators
+                    .get(*operator)
+                    .ok_or_else(|| CoreError::protocol("Unknown operator"))?;
+                if definition.arity != args.len() {
+                    return Err(CoreError::protocol("Operator arity mismatch"));
+                }
+                arena.tick()?;
+                let locals = vec![Scalar::Bool(false); args.len()];
+                bind_arguments(0, args, ctx, None, &definition.body, &locals, arena)?
+            }
+            Self::Fold {
+                accumulator,
+                initial,
+                collection,
+                order,
+                body,
+            } => {
+                if *accumulator != ctx.locals.len() {
+                    return Err(CoreError::protocol("Invalid fold variable slot"));
+                }
+                let mut result = initial.eval(ctx, arena)?;
+                let source = collection.eval(ctx, arena)?;
+                let elements = match order {
+                    FoldOrder::SetMembers => arena.members(source)?,
+                    FoldOrder::SequenceLeft => arena.sequence(source)?,
+                };
+                let mut locals = ctx.locals.to_vec();
+                for element in elements {
+                    arena.tick()?;
+                    locals.push(result);
+                    locals.push(element);
+                    result = body.eval(
+                        EvalContext {
+                            locals: &locals,
+                            ..ctx
+                        },
+                        arena,
+                    )?;
+                    locals.truncate(ctx.locals.len());
+                }
+                result
             }
             Self::Domain { argument } => {
                 let value = argument.eval(ctx, arena)?;
@@ -882,6 +1076,7 @@ impl Expression {
                             locals: ctx.locals,
                             old: None,
                             prime: false,
+                            lazy: ctx.lazy,
                         },
                         &mut next,
                         arena,
@@ -1220,6 +1415,37 @@ pub(crate) fn visit_branch(
             }
             Ok(false)
         }
+        Step::Let {
+            slot,
+            value,
+            stable,
+        } => {
+            if *slot != ctx.locals.len() {
+                return Err(CoreError::protocol("Unbound action variable"));
+            }
+            let frame = LazyFrame {
+                slot: *slot,
+                value,
+                ctx: EvalContext { next: &[], ..ctx },
+                cache: std::cell::Cell::new(None),
+                parent: ctx.lazy,
+                stable: *stable,
+            };
+            let mut locals = ctx.locals.to_vec();
+            locals.push(Scalar::Bool(false));
+            visit_branch(
+                branch,
+                position + 1,
+                EvalContext {
+                    locals: &locals,
+                    lazy: Some(&frame),
+                    ..ctx
+                },
+                next,
+                arena,
+                visitor,
+            )
+        }
         Step::Bind {
             slot,
             domain,
@@ -1490,6 +1716,7 @@ mod tests {
             locals: &locals,
             old: Some(Scalar::Int(-1)),
             prime: false,
+            lazy: None,
         };
         let mut arena = Arena::new(0);
         for (expression, expected) in [
